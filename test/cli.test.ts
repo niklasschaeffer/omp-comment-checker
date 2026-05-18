@@ -35,6 +35,23 @@ describe("runCommentChecker", () => {
 		expect(result.stderr).toBe(`${"x".repeat(maxOutputBytes)}\n[stderr truncated after 16 bytes]`);
 	});
 
+	it("#given multibyte process output #when cap splits a character #then stderr keeps valid UTF-8", async () => {
+		// given
+		const maxOutputBytes = 1;
+
+		// when
+		const result = await spawnProcess(
+			process.execPath,
+			["-e", "process.stderr.write('🙂'); process.exit(2);"],
+			"",
+			maxOutputBytes,
+		);
+
+		// then
+		expect(result.exitCode).toBe(2);
+		expect(result.stderr).toBe("\n[stderr truncated after 1 bytes]");
+	});
+
 	it("#given executor exit zero #when running checker #then returns pass and sends hook JSON", async () => {
 		// given
 		const input = makeHookInput();

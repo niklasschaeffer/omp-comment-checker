@@ -117,10 +117,23 @@ function appendOutput(output: OutputAccumulator, chunk: string, maxOutputBytes: 
 	}
 
 	if (remainingBytes > 0) {
-		output.text += Buffer.from(chunk, "utf8").subarray(0, remainingBytes).toString("utf8");
-		output.bytes += remainingBytes;
+		const prefix = truncateUtf8Prefix(chunk, remainingBytes);
+		output.text += prefix;
+		output.bytes += Buffer.byteLength(prefix, "utf8");
 	}
 	output.truncated = true;
+}
+
+function truncateUtf8Prefix(text: string, maxBytes: number): string {
+	let bytes = 0;
+	let endIndex = 0;
+	for (const character of text) {
+		const characterBytes = Buffer.byteLength(character, "utf8");
+		if (bytes + characterBytes > maxBytes) break;
+		bytes += characterBytes;
+		endIndex += character.length;
+	}
+	return text.slice(0, endIndex);
 }
 
 function formatOutput(output: OutputAccumulator, streamName: "stdout" | "stderr", maxOutputBytes: number): string {
