@@ -125,6 +125,13 @@ function appendOutput(output: OutputAccumulator, chunk: string, maxOutputBytes: 
 	output.truncated = true;
 }
 
+function replaceOutput(output: OutputAccumulator, text: string, maxOutputBytes: number): void {
+	output.text = "";
+	output.bytes = 0;
+	output.truncated = false;
+	appendOutput(output, text, maxOutputBytes);
+}
+
 function truncateUtf8Prefix(text: string, maxBytes: number): string {
 	let bytes = 0;
 	let endIndex = 0;
@@ -165,7 +172,7 @@ export function spawnProcess(
 				? setTimeout(() => {
 						if (settled) return;
 						timedOut = true;
-						appendOutput(stderr, `comment-checker process timed out after ${timeoutLimit} ms`, outputByteLimit);
+						replaceOutput(stderr, `comment-checker process timed out after ${timeoutLimit} ms`, outputByteLimit);
 						proc.kill("SIGTERM");
 						killTimer = setTimeout(() => {
 							if (!settled) proc.kill("SIGKILL");

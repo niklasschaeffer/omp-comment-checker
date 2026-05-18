@@ -77,6 +77,25 @@ describe("runCommentChecker", () => {
 		expect(result.stderr).toBe("comment-checker process timed out after 50 ms");
 	});
 
+	it("#given noisy hanging checker process #when timeout expires #then timeout reason is preserved", async () => {
+		// given
+		const maxOutputBytes = 128;
+		const processTimeoutMs = 50;
+
+		// when
+		const result = await spawnProcess(
+			process.execPath,
+			["-e", "process.stderr.write('x'.repeat(512)); setInterval(() => {}, 1000);"],
+			"",
+			maxOutputBytes,
+			processTimeoutMs,
+		);
+
+		// then
+		expect(result.exitCode).toBeNull();
+		expect(result.stderr).toBe("comment-checker process timed out after 50 ms");
+	});
+
 	it("#given executor exit zero #when running checker #then returns pass and sends hook JSON", async () => {
 		// given
 		const input = makeHookInput();
