@@ -133,7 +133,7 @@ function extractEditRequest(event: ToolResultLike): CommentCheckRequest[] {
 
 function extractMultiEditRequest(event: ToolResultLike): CommentCheckRequest[] {
 	const filePath = getString(event.input, ["filePath", "file_path", "path"]);
-	const edits = getEdits(event.input.edits);
+	const edits = getEdits(event.input["edits"]);
 	if (!filePath || edits.length === 0) return [];
 	return [
 		{
@@ -193,11 +193,13 @@ function extractApplyPatchMetadataRequests(details: unknown, sourceToolName: str
 
 function getApplyPatchMetadataFiles(details: unknown): ApplyPatchFileMetadata[] {
 	if (!isRecord(details)) return [];
-	const direct = readApplyPatchMetadataFiles(details.files);
+	const direct = readApplyPatchMetadataFiles(details["files"]);
 	if (direct.length > 0) return direct;
-	const result = isRecord(details.result) ? readApplyPatchMetadataFiles(details.result.files) : [];
+	const resultValue = details["result"];
+	const result = isRecord(resultValue) ? readApplyPatchMetadataFiles(resultValue["files"]) : [];
 	if (result.length > 0) return result;
-	const metadata = isRecord(details.metadata) ? readApplyPatchMetadataFiles(details.metadata.files) : [];
+	const metadataValue = details["metadata"];
+	const metadata = isRecord(metadataValue) ? readApplyPatchMetadataFiles(metadataValue["files"]) : [];
 	return metadata;
 }
 
@@ -212,13 +214,10 @@ function readApplyPatchMetadataFiles(value: unknown): ApplyPatchFileMetadata[] {
 		const after = getString(item, ["after", "new", "newString", "new_string"]);
 		const type = getString(item, ["type", "operation"]);
 		if (!filePath || before === undefined || after === undefined) continue;
-		files.push({
-			filePath,
-			movePath,
-			before,
-			after,
-			type,
-		});
+		const file: ApplyPatchFileMetadata = { filePath, before, after };
+		if (movePath !== undefined) file.movePath = movePath;
+		if (type !== undefined) file.type = type;
+		files.push(file);
 	}
 	return files;
 }

@@ -227,7 +227,7 @@ describe("extractCommentCheckRequests", () => {
 describe("toHookInput", () => {
 	it("#given comment check request #when converting to hook input #then includes session and cwd", () => {
 		// given
-		const request = extractCommentCheckRequests({
+		const [request] = extractCommentCheckRequests({
 			toolName: "write",
 			input: {
 				filePath: "src/example.ts",
@@ -235,7 +235,8 @@ describe("toHookInput", () => {
 			},
 			content: [{ type: "text", text: "ok" }],
 			isError: false,
-		})[0]!;
+		});
+		if (!request) throw new Error("expected a comment check request");
 
 		// when
 		const input = toHookInput(request, {
