@@ -84,9 +84,23 @@ export async function runCommentChecker(
 
 export function resolveCommentCheckerBinary(): string | undefined {
 	const binaryName = process.platform === "win32" ? "comment-checker.exe" : "comment-checker";
+	const fromPackageApi = resolvePackageApiBinary();
+	if (fromPackageApi) return fromPackageApi;
 	const fromPackage = resolvePackageBinary(binaryName);
 	if (fromPackage) return fromPackage;
 	return undefined;
+}
+
+function resolvePackageApiBinary(): string | undefined {
+	try {
+		const require = createRequire(import.meta.url);
+		const packageExports: unknown = require("@code-yeongyu/comment-checker");
+		if (!isCommentCheckerPackage(packageExports)) return undefined;
+		const binaryPath = packageExports.getBinaryPath();
+		return existsSync(binaryPath) ? binaryPath : undefined;
+	} catch {
+		return undefined;
+	}
 }
 
 function resolvePackageBinary(binaryName: string): string | undefined {
@@ -98,6 +112,11 @@ function resolvePackageBinary(binaryName: string): string | undefined {
 	} catch {
 		return undefined;
 	}
+}
+
+function isCommentCheckerPackage(value: unknown): value is { getBinaryPath: () => string } {
+	if (typeof value !== "object" || value === null) return false;
+	return typeof Object.getOwnPropertyDescriptor(value, "getBinaryPath")?.value === "function";
 }
 
 interface OutputAccumulator {
