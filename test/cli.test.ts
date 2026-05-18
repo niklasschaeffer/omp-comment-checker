@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type ProcessExecutor, runCommentChecker } from "../src/cli.ts";
+import { MAX_PROCESS_OUTPUT_BYTES, type ProcessExecutor, runCommentChecker, spawnProcess } from "../src/cli.ts";
 import type { CommentCheckerHookInput } from "../src/core.ts";
 
 function makeHookInput(): CommentCheckerHookInput {
@@ -17,6 +17,24 @@ function makeHookInput(): CommentCheckerHookInput {
 }
 
 describe("runCommentChecker", () => {
+	it("#given noisy checker process #when output exceeds cap #then stderr is bounded", async () => {
+		// given
+		const maxOutputBytes = 16;
+
+		// when
+		const result = await spawnProcess(
+			process.execPath,
+			["-e", "process.stderr.write('x'.repeat(40)); process.exit(2);"],
+			"",
+			maxOutputBytes,
+		);
+
+		// then
+		expect(MAX_PROCESS_OUTPUT_BYTES).toBeGreaterThan(maxOutputBytes);
+		expect(result.exitCode).toBe(2);
+		expect(result.stderr).toBe(`${"x".repeat(maxOutputBytes)}\n[stderr truncated after 16 bytes]`);
+	});
+
 	it("#given executor exit zero #when running checker #then returns pass and sends hook JSON", async () => {
 		// given
 		const input = makeHookInput();
