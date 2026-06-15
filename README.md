@@ -1,101 +1,103 @@
-# pi-comment-checker
+# omp-comment-checker
 
-[![ci](https://github.com/code-yeongyu/pi-comment-checker/actions/workflows/ci.yml/badge.svg)](https://github.com/code-yeongyu/pi-comment-checker/actions/workflows/ci.yml) [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Comment checker hook for the [pi coding agent](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) and `senpi`. It runs [`@code-yeongyu/comment-checker`](https://github.com/code-yeongyu/go-claude-code-comment-checker) after mutation tools and appends the checker warning back into the tool result so the agent must react.
+Comment checker hook for
+[oh-my-pi](https://github.com/can1357/oh-my-pi) (`omp`) and the upstream
+[pi coding agent](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent).
+Forked from
+[`code-yeongyu/pi-comment-checker`](https://github.com/code-yeongyu/pi-comment-checker)
+v0.1.0 and retargeted at the omp extension API.
 
-This package is the standalone pi extension version of the `oh-my-openagent` / `../omo` comment-checker hook.
+Runs [`@code-yeongyu/comment-checker`](https://github.com/code-yeongyu/go-claude-code-comment-checker)
+after every mutation tool, surfaces the warning back into the tool result
+so the agent must react, and **self-heals** the warning across the next
+session compaction so the LLM sees it again on the next turn.
+
+## Why this fork
+
+Pi and omp share the same extension shape, but omp ships three extra
+capabilities this checker uses to recover from comment-detected output:
+
+| Capability | What the checker does with it |
+| --- | --- |
+| `pi.appendEntry(customType, data)` | Persists each unfired warning to the session file. |
+| `pi.sendMessage(content, options)` | Re-injects unresolved warnings as a custom message on `session_compact`. |
+| `ctx.ui.setStatus(key, text)` | Shows a sticky footer line: `⚠ comment-checker: N warning(s) in …`. |
+| `ctx.ui.notify(message, level)` | Flashes a per-warning notification. |
+
+The fork detects the host at load time. If `appendEntry` / `sendMessage`
+are absent (plain pi), the self-heal loop is a no-op and behavior matches
+upstream 0.1.0 exactly.
 
 ## Behavior
 
 | Case | Result |
 |------|--------|
 | `write` succeeds | checks the written `content` |
-| `edit` succeeds | checks `old_string` / `new_string` |
+| `edit` succeeds | checks `oldString` / `newString` |
 | `multiedit` succeeds | checks the complete `edits` payload |
 | `apply_patch` succeeds with OMO metadata | checks each metadata file using `before` / `after`, skips deletes |
 | `apply_patch` succeeds without metadata | falls back to raw Codex patch parsing |
-| checker exits `2` | appends the warning message to the tool result and leaves the TUI hidden |
-| checker binary missing | leaves the TUI hidden and leaves tool output unchanged |
-| checker exits unexpectedly | leaves the TUI hidden and leaves tool output unchanged |
+| omp `edit` tool (any mode: `hashline` / `patch` / `replace` / `apply_patch`) | reads `details.perFileResults` for `oldText` / `newText` per affected file |
+| checker exits `2` | appends the warning message to the tool result AND fires the self-heal path |
+| checker binary missing | leaves the TUI hidden, leaves tool output unchanged, no self-heal |
+| checker exits unexpectedly | leaves the TUI hidden, leaves tool output unchanged, no self-heal |
 
-## apply_patch support
+## Self-heal flow
 
-`apply_patch` is handled in two layers:
-
-1. OMO-compatible metadata/details:
-
-```json
-{
-  "files": [
-    {
-      "filePath": "src/old.ts",
-      "movePath": "src/new.ts",
-      "before": "const before = 1;\n",
-      "after": "// explain next value\nconst after = 2;\n",
-      "type": "update"
-    }
-  ]
-}
+```
+1. Mutation tool (write / edit / multiedit / apply_patch) finishes.
+2. omp-comment-checker reads the result, extracts the file payload,
+   runs the @code-yeongyu/comment-checker binary, exit code 2.
+3. Append the warning to the existing tool result content so the
+   current LLM turn sees it.
+4. Persist the warning via pi.appendEntry("omp-comment-checker:warning", …).
+5. On the next session_compact event, re-inject any unfired warnings
+   via pi.sendMessage(...) so the LLM sees them again as fresh
+   context. The store is cleared on session_start.
+6. Update the omp footer status line via ctx.ui.setStatus.
 ```
 
-2. Raw Codex patch fallback:
-
-```text
-*** Begin Patch
-*** Update File: src/example.ts
-@@
--const before = 1;
-+// explain value
-+const after = 2;
-*** End Patch
-```
-
-Deletes are ignored because they cannot introduce new comments.
-
-## TUI
-
-The extension uses an above-editor widget with key `pi-comment-checker`.
-
-| State | Widget |
-|---|---|
-| Loading | hidden |
-| Missing binary | hidden |
-| Warning | hidden |
-| Clean | widget hidden |
-
-It does not set or modify the footer.
+The `session_compact` listener only fires under omp. Under plain pi, the
+listener registration is skipped and the store is local-only.
 
 ## Installation
 
-The package targets the `pi` / `senpi` extension package system.
+The package targets both the omp extension loader and the upstream pi
+extension loader.
 
 ```bash
 # 1. From npm (once published)
-pi install npm:pi-comment-checker
+omp install npm:omp-comment-checker
+pi  install npm:omp-comment-checker
 
 # 2. From git
-pi install git:github.com/code-yeongyu/pi-comment-checker
+omp install git:github:niklasschaeffer/omp-comment-checker
+pi  install git:github:niklasschaeffer/omp-comment-checker
 
-# 3. senpi settings.json
+# 3. omp settings.json (~/.omp/settings.json)
 {
   "packages": [
-    "git:github.com/code-yeongyu/pi-comment-checker"
+    "git:github:niklasschaeffer/omp-comment-checker"
   ]
 }
 
 # 4. Dev / one-shot test
-pi -e /path/to/pi-comment-checker/src/index.ts
-senpi -e /path/to/pi-comment-checker/src/index.ts
+omp -e /path/to/omp-comment-checker/src/index.ts
+pi  -e /path/to/omp-comment-checker/src/index.ts
 ```
 
-After installation, restart pi/senpi or run `/reload` inside an interactive session.
+After installation, restart the agent or run `/reload` inside an
+interactive session.
 
 ## Command
 
-### `/comment-checker`
+### `/omp-comment-checker`
 
-Shows binary availability and setup guidance.
+Shows binary availability, the current warning count, and the list of
+unfired warnings. If the binary is missing, the command prints setup
+guidance and pings the footer status line.
 
 ## Development
 
@@ -105,19 +107,17 @@ npm test
 npm run typecheck
 npm run check
 npm pack --dry-run
-pi -e ./src/index.ts
+omp -e ./src/index.ts
+pi  -e ./src/index.ts
 ```
-
-## Branch rules and releases
-
-- `main` is protected by `.github/branch-ruleset.json`.
-- CI runs Node 20 and 22 on Ubuntu and macOS.
-- Releases are GitHub Releases tagged as `v<semver>`.
-- Publishing runs from the `publish` workflow after a GitHub Release is published.
 
 ## Origin
 
-Ported from `../omo/src/hooks/comment-checker` and adapted to the public pi-coding-agent extension API.
+Ported from
+[`code-yeongyu/pi-comment-checker`](https://github.com/code-yeongyu/pi-comment-checker)
+v0.1.0 and adapted to the public oh-my-pi extension API. Upstream
+checker behavior is preserved; the fork adds the omp self-heal loop
+and the omp edit-tool `details.perFileResults` extraction path.
 
 ## License
 
@@ -125,11 +125,22 @@ Ported from `../omo/src/hooks/comment-checker` and adapted to the public pi-codi
 
 ## Related
 
-- [senpi](https://github.com/code-yeongyu/senpi) — the fork/runtime these extensions are extracted for.
-- [oh-my-openagent](https://github.com/code-yeongyu/oh-my-openagent) — original OpenCode plugin hook source.
-- [comment-checker](https://github.com/code-yeongyu/go-claude-code-comment-checker) — native checker binary.
+- [oh-my-pi](https://github.com/can1357/oh-my-pi) — the target runtime.
+- [pi coding agent](https://github.com/badlogic/pi-mono) — the upstream
+  runtime this fork also supports.
+- [pi-comment-checker](https://github.com/code-yeongyu/pi-comment-checker) — the upstream
+  package this fork is based on.
+- [senpi](https://github.com/code-yeongyu/senpi) — the original
+  runtime these extensions were extracted for.
+- [comment-checker](https://github.com/code-yeongyu/go-claude-code-comment-checker) — the
+  native checker binary.
 
 ## Acknowledgements
 
-- **Mario Zechner** ([@badlogic](https://github.com/badlogic)) — author of [pi-mono](https://github.com/badlogic/pi-mono) and the pi-coding-agent extension API this package targets.
-- **Yeongyu Kim** ([@code-yeongyu](https://github.com/code-yeongyu)) — maintainer of senpi, oh-my-openagent, and comment-checker.
+- **Mario Zechner** ([@badlogic](https://github.com/badlogic)) — author
+  of `pi-mono` and the pi-coding-agent extension API.
+- **Can Bölük** ([@can1357](https://github.com/can1357)) — author of
+  `oh-my-pi` and the self-heal / session_compact contract this fork
+  uses.
+- **Yeongyu Kim** ([@code-yeongyu](https://github.com/code-yeongyu)) —
+  author of the upstream extension and the comment-checker binary.

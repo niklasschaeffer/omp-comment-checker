@@ -1,6 +1,27 @@
-pi-comment-checker
+omp-comment-checker
 
-This package ports the oh-my-openagent comment-checker hook into a standalone
-pi-coding-agent extension repository.
+This package is a fork of https://github.com/code-yeongyu/pi-comment-checker
+v0.1.0 (copyright (c) 2026 Yeongyu Kim, MIT-licensed) retargeted at the
+oh-my-pi (https://github.com/can1357/oh-my-pi) extension API published
+as @oh-my-pi/pi-coding-agent.
 
-The extension targets the public pi-coding-agent extension API.
+The fork preserves upstream checker behavior and adds a self-heal loop
+that uses three oh-my-pi-only affordances:
+
+  * pi.appendEntry(customType, data)   - persists each unfired warning
+    to the session file
+  * pi.sendMessage(content, options)   - re-injects unfired warnings
+    as a custom message on the next session_compact event
+  * ctx.ui.setStatus(key, text)        - shows a sticky footer line
+    summarizing the warning count and file list
+
+When the host does not provide those affordances (plain pi), the
+self-heal loop is a no-op and behavior matches upstream 0.1.0
+exactly.
+
+The extension targets the public pi-coding-agent and oh-my-pi
+extension APIs only and does not reach into internal modules of
+either package.
+
+Copyright (c) 2026 Yeongyu Kim (upstream)
+Copyright (c) 2026 Niklas Schäffer (fork changes)

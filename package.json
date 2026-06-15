@@ -1,20 +1,22 @@
 {
-	"name": "pi-comment-checker",
-	"version": "0.1.0",
-	"description": "Comment checker hook extension for pi/senpi. Runs @code-yeongyu/comment-checker after write, edit, multiedit, and apply_patch, then surfaces warnings in the TUI.",
+	"name": "omp-comment-checker",
+	"version": "0.2.0",
+	"description": "Comment checker hook extension for oh-my-pi (omp). Runs @code-yeongyu/comment-checker after write, edit, multiedit, apply_patch, hashline, patch, and replace, then self-heals via omp's session_compact + TUI notifications.",
 	"type": "module",
 	"license": "MIT",
-	"homepage": "https://github.com/code-yeongyu/pi-comment-checker",
+	"homepage": "https://github.com/niklasschaeffer/omp-comment-checker",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/code-yeongyu/pi-comment-checker.git"
+		"url": "git+https://github.com/niklasschaeffer/omp-comment-checker.git",
+		"directory": "."
 	},
 	"bugs": {
-		"url": "https://github.com/code-yeongyu/pi-comment-checker/issues"
+		"url": "https://github.com/niklasschaeffer/omp-comment-checker/issues"
 	},
 	"keywords": [
+		"oh-my-pi",
+		"omp",
 		"pi",
-		"senpi",
 		"pi-mono",
 		"pi-coding-agent",
 		"pi-extension",
@@ -22,6 +24,7 @@
 		"comment-checker",
 		"comments",
 		"hooks",
+		"self-heal",
 		"typescript"
 	],
 	"pi": {
@@ -47,7 +50,14 @@
 	"peerDependencies": {
 		"@mariozechner/pi-ai": "*",
 		"@mariozechner/pi-coding-agent": "*",
-		"@mariozechner/pi-tui": "*"
+		"@mariozechner/pi-tui": "*",
+		"@oh-my-pi/pi-coding-agent": "*"
+	},
+	"peerDependenciesMeta": {
+		"@mariozechner/pi-ai": { "optional": true },
+		"@mariozechner/pi-coding-agent": { "optional": true },
+		"@mariozechner/pi-tui": { "optional": true },
+		"@oh-my-pi/pi-coding-agent": { "optional": true }
 	},
 	"dependencies": {
 		"@code-yeongyu/comment-checker": "^0.8.0"
@@ -55,7 +65,7 @@
 	"devDependencies": {
 		"@biomejs/biome": "2.4.16",
 		"@types/node": "^25.9.1",
-		"@typescript/native-preview": "^7.0.0-dev.20260604.1",
+		"@typescript/native-preview": "^7.0.-dev.20260604.1",
 		"typescript": "^6.0.3",
 		"vitest": "^4.1.8"
 	},

@@ -73,7 +73,13 @@ describe("createCommentCheckerToolResultHandler", () => {
 			{ type: "text", text: "update: src/example.ts" },
 			{ type: "text", text: "\n\nCOMMENT DETECTED" },
 		]);
-		expect(ctx.widgetCalls).toEqual([["pi-comment-checker", undefined, { placement: "aboveEditor" }]]);
+		expect(ctx.widgetCalls).toEqual([
+			[
+				"pi-comment-checker",
+				["⚠ omp-comment-checker", "  1 warning(s) in:", "  • src/example.ts — COMMENT DETECTED"],
+				{ placement: "aboveEditor" },
+			],
+		]);
 	});
 
 	it("#given missing binary #when handling write result #then hides setup guidance without changing tool output", async () => {
@@ -128,13 +134,18 @@ describe("createCommentCheckerToolResultHandler", () => {
 
 		// when
 		const result = await handler(event, ctx);
-
+		expect(ctx.widgetCalls).toEqual([
+			[
+				"pi-comment-checker",
+				["⚠ omp-comment-checker", "  1 warning(s) in:", "  • src/example.ts — COMMENT DETECTED"],
+				{ placement: "aboveEditor" },
+			],
+		]);
 		// then
 		expect(result?.content).toEqual([
 			{ type: "text", text: "wrote src/example.ts" },
 			{ type: "text", text: "\n\nCOMMENT DETECTED" },
 		]);
-		expect(ctx.widgetCalls).toEqual([["pi-comment-checker", undefined, { placement: "aboveEditor" }]]);
 	});
 
 	it("#given write clean #when handling tool result #then leaves tool output unchanged and keeps TUI hidden", async () => {
@@ -196,7 +207,13 @@ describe("createCommentCheckerToolResultHandler", () => {
 			{ type: "text", text: "edited src/example.ts" },
 			{ type: "text", text: "\n\nCOMMENT DETECTED" },
 		]);
-		expect(ctx.widgetCalls).toEqual([["pi-comment-checker", undefined, { placement: "aboveEditor" }]]);
+		expect(ctx.widgetCalls).toEqual([
+			[
+				"pi-comment-checker",
+				["⚠ omp-comment-checker", "  1 warning(s) in:", "  • src/example.ts — COMMENT DETECTED"],
+				{ placement: "aboveEditor" },
+			],
+		]);
 	});
 
 	it("#given checker error #when handling tool result #then leaves tool output unchanged and keeps TUI hidden", async () => {

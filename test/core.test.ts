@@ -61,6 +61,90 @@ describe("extractCommentCheckRequests", () => {
 			},
 		]);
 	});
+	it("#given edit tool result with perFileResults details #when extracting requests #then maps to Edit and Write hook inputs", () => {
+		// given
+		const event: ToolResultLike = {
+			toolName: "edit",
+			input: { path: "src/example.ts", old_string: "const x = 1;", new_string: "const x = 2;" },
+			content: [{ type: "text", text: "edited 2 files" }],
+			isError: false,
+			details: {
+				perFileResults: [
+					{ filePath: "src/a.ts", oldText: "a", newText: "A", success: true },
+					{ filePath: "src/b.ts", oldText: "", newText: "B", success: true },
+					{ filePath: "src/c.ts", oldText: "c", newText: "C", success: false },
+				],
+			},
+		};
+
+		// when
+		const requests = extractCommentCheckRequests(event);
+
+		// then
+		expect(requests).toEqual([
+			{
+				sourceToolName: "edit",
+				toolName: "Edit",
+				filePath: "src/a.ts",
+				toolInput: { file_path: "src/a.ts", old_string: "a", new_string: "A" },
+			},
+			{
+				sourceToolName: "edit",
+				toolName: "Write",
+				filePath: "src/b.ts",
+				toolInput: { file_path: "src/b.ts", content: "B" },
+			},
+		]);
+	});
+
+	it("#given edit tool result with files details (OMO shape) #when extracting requests #then maps to Edit hook inputs", () => {
+		// given
+		const event: ToolResultLike = {
+			toolName: "edit",
+			input: { path: "src/example.ts", old_string: "const x = 1;", new_string: "const x = 2;" },
+			content: [{ type: "text", text: "edited" }],
+			isError: false,
+			details: {
+				files: [{ file_path: "src/omo.ts", old_text: "old", new_text: "new", success: true }],
+			},
+		};
+
+		// when
+		const requests = extractCommentCheckRequests(event);
+
+		// then
+		expect(requests).toEqual([
+			{
+				sourceToolName: "edit",
+				toolName: "Edit",
+				filePath: "src/omo.ts",
+				toolInput: { file_path: "src/omo.ts", old_string: "old", new_string: "new" },
+			},
+		]);
+	});
+
+	it("#given edit tool result without details #when extracting requests #then falls back to input", () => {
+		// given
+		const event: ToolResultLike = {
+			toolName: "edit",
+			input: { path: "src/fallback.ts", old_string: "old", new_string: "new" },
+			content: [{ type: "text", text: "edited" }],
+			isError: false,
+		};
+
+		// when
+		const requests = extractCommentCheckRequests(event);
+
+		// then
+		expect(requests).toEqual([
+			{
+				sourceToolName: "edit",
+				toolName: "Edit",
+				filePath: "src/fallback.ts",
+				toolInput: { file_path: "src/fallback.ts", old_string: "old", new_string: "new" },
+			},
+		]);
+	});
 
 	it("#given multiedit tool result #when extracting requests #then maps edits to a MultiEdit hook input", () => {
 		// given

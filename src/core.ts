@@ -22,6 +22,14 @@ export type CommentCheckRequest = {
 	toolInput: CheckerToolInput;
 };
 
+export type OmpPerFileEditResult = {
+	filePath: string;
+	movePath?: string | undefined;
+	oldText: string;
+	newText: string;
+	success: boolean;
+};
+
 export type CommentCheckerHookInput = {
 	session_id: string;
 	tool_name: CheckerToolName;
@@ -57,13 +65,76 @@ type ApplyPatchFileMetadata = {
 	type?: string;
 };
 
+export function extractFromOmpEditDetails(details: unknown): Array<OmpPerFileEditResult & { op: "write" | "edit" }> {
+	if (!isRecord(details)) return [];
+	const source = details["perFileResults"] ?? details["files"];
+	if (!Array.isArray(source)) return [];
+	const results: Array<OmpPerFileEditResult & { op: "write" | "edit" }> = [];
+	for (const item of source) {
+		if (!isRecord(item)) continue;
+		const filePath = getString(item, ["filePath", "file_path"]) ?? "";
+		const movePath = getString(item, ["movePath", "move_path"]);
+		const oldText = getString(item, ["oldText", "old_text", "oldString", "old_string"]) ?? "";
+		const newText = getString(item, ["newText", "new_text", "newString", "new_string"]) ?? "";
+		if (typeof filePath !== "string" || filePath.length === 0) continue;
+		const success = item["success"];
+		if (success === false) continue;
+		results.push({
+			filePath,
+			movePath: typeof movePath === "string" && movePath.length > 0 ? movePath : undefined,
+			oldText,
+			newText,
+			op: oldText.length === 0 ? "write" : "edit",
+			success: success === true,
+		});
+	}
+	return results;
+}
+
+function ompEditResultsToCommentCheckRequests(
+	sourceToolName: string,
+	results: Array<OmpPerFileEditResult & { op: "write" | "edit" }>,
+): CommentCheckRequest[] {
+	const requests: CommentCheckRequest[] = [];
+	for (const result of results) {
+		if (result.op === "write") {
+			requests.push({
+				sourceToolName,
+				toolName: "Write",
+				filePath: result.filePath,
+				toolInput: {
+					file_path: result.filePath,
+					content: result.newText,
+				},
+			});
+			continue;
+		}
+		requests.push({
+			sourceToolName,
+			toolName: "Edit",
+			filePath: result.filePath,
+			toolInput: {
+				file_path: result.filePath,
+				old_string: result.oldText,
+				new_string: result.newText,
+			},
+		});
+	}
+	return requests;
+}
+
 export function extractCommentCheckRequests(event: ToolResultLike): CommentCheckRequest[] {
 	if (event.isError) return [];
 	if (isToolFailureOutput(getContentText(event.content))) return [];
 
 	const toolName = event.toolName.toLowerCase();
 	if (toolName === "write") return extractWriteRequest(event);
-	if (toolName === "edit") return extractEditRequest(event);
+	if (toolName === "edit") {
+		const ompResults = extractFromOmpEditDetails(event.details);
+		const ompRequests = ompEditResultsToCommentCheckRequests(event.toolName, ompResults);
+		if (ompRequests.length > 0) return ompRequests;
+		return extractEditRequest(event);
+	}
 	if (toolName === "multiedit" || toolName === "multi_edit") return extractMultiEditRequest(event);
 	if (toolName === "apply_patch") return extractApplyPatchRequests(event);
 	return [];
