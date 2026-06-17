@@ -1,6 +1,6 @@
 {
 	"name": "omp-comment-checker",
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"description": "Comment checker hook extension for oh-my-pi (omp). Runs @code-yeongyu/comment-checker after write, edit, multiedit, apply_patch, hashline, patch, and replace, then self-heals via omp's session_compact + TUI notifications.",
 	"type": "module",
 	"license": "MIT",
