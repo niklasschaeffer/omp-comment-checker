@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/nx-solutions-ug/omp-comment-checker/compare/v1.0.0...v1.1.0) (2026-06-22)
+
+
+### Features
+
+* block bad writes pre-exec and surface warnings as LLM errors ([5f1a6b6](https://github.com/nx-solutions-ug/omp-comment-checker/commit/5f1a6b6f9070b393a477f7509f7903a5f404485b))
+
 # 1.0.0 (2026-06-18)
 
 
