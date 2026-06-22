@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/nx-solutions-ug/omp-comment-checker/compare/v1.1.0...v1.1.1) (2026-06-22)
+
+
+### Bug Fixes
+
+* harden extractCommentCheckRequests against malformed event payloads ([b8d0f95](https://github.com/nx-solutions-ug/omp-comment-checker/commit/b8d0f9565bd3a802da8ff23810eae9415c8c4924))
+
 # [1.1.0](https://github.com/nx-solutions-ug/omp-comment-checker/compare/v1.0.0...v1.1.0) (2026-06-22)
 
 
