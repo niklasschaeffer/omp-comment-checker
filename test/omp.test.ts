@@ -5,7 +5,6 @@ import type { ExtensionContextLike } from "../src/index.ts";
 import ompCommentCheckerExtension from "../src/index.ts";
 import { createOmpBackend, type WarningRecord } from "../src/omp.js";
 import { SelfHealStore } from "../src/self-heal.js";
-import { formatFooterStatus } from "../src/ui.js";
 
 describe("SelfHealStore", () => {
 	it("#given a fresh store #when recording warnings #then assigns stable ids and returns unfired in order", () => {
@@ -164,34 +163,6 @@ describe("createOmpBackend", () => {
 		expect(backend.available).toBe(false);
 		expect(typeof cleanup).toBe("function");
 	});
-
-	it("#given a backend and a context with setStatus #when setting status #then delegates to ctx.ui.setStatus", () => {
-		// given
-		const statusCalls: unknown[] = [];
-		const ctx: ExtensionContextLike = {
-			cwd: "/workspace",
-			ui: {
-				setWidget: () => {
-					/* no-op */
-				},
-				setStatus: (key, text) => {
-					statusCalls.push([key, text]);
-				},
-			},
-		};
-		const pi = {
-			appendEntry: () => {
-				/* no-op */
-			},
-		};
-
-		// when
-		const backend = createOmpBackend(pi);
-		backend.setStatus(ctx, "⚠ warning");
-
-		// then
-		expect(statusCalls).toEqual([["pi-comment-checker", "⚠ warning"]]);
-	});
 });
 
 describe("extractFromOmpEditDetails", () => {
@@ -237,41 +208,6 @@ describe("extractFromOmpEditDetails", () => {
 
 		// then
 		expect(results).toEqual([]);
-	});
-});
-
-describe("formatFooterStatus", () => {
-	it("#given warning state #when formatting footer status #then returns warning summary", () => {
-		// given
-		const state = {
-			status: "warning" as const,
-			checkedFiles: ["src/a.ts", "src/b.ts"],
-			warnings: [
-				{ filePath: "src/a.ts", message: "m1" },
-				{ filePath: "src/b.ts", message: "m2" },
-			],
-		};
-
-		// when
-		const status = formatFooterStatus(state);
-
-		// then
-		expect(status).toEqual("⚠ comment-checker: 2 warning(s) in src/a.ts, src/b.ts");
-	});
-
-	it("#given many warnings #when formatting footer status #then truncates with ellipsis", () => {
-		// given
-		const state = {
-			status: "warning" as const,
-			checkedFiles: [],
-			warnings: Array.from({ length: 5 }, (_, i) => ({ filePath: `src/${i + 1}.ts`, message: `m${i + 1}` })),
-		};
-
-		// when
-		const status = formatFooterStatus(state);
-
-		// then
-		expect(status).toEqual("⚠ comment-checker: 5 warning(s) in src/1.ts, src/2.ts, src/3.ts …");
 	});
 });
 
@@ -334,12 +270,6 @@ describe("ompCommentCheckerExtension end-to-end", () => {
 				cwd: "/workspace",
 				sessionManager: { getSessionId: () => "session-1" },
 				ui: {
-					setWidget: () => {
-						/* no-op */
-					},
-					setStatus: () => {
-						/* no-op */
-					},
 					notify: () => {
 						/* no-op */
 					},
@@ -360,11 +290,7 @@ describe("ompCommentCheckerExtension end-to-end", () => {
 			{},
 			{
 				cwd: "/workspace",
-				ui: {
-					setWidget: () => {
-						/* no-op */
-					},
-				},
+				ui: {},
 			},
 		);
 
@@ -411,12 +337,6 @@ describe("ompCommentCheckerExtension end-to-end", () => {
 			cwd: "/workspace",
 			sessionManager: { getSessionId: () => "session-1" },
 			ui: {
-				setWidget: () => {
-					/* no-op */
-				},
-				setStatus: () => {
-					/* no-op */
-				},
 				notify: () => {
 					/* no-op */
 				},

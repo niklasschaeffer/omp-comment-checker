@@ -34,7 +34,7 @@ as session entries and re-injected into context on the next
 - `apply_patch` must support OMO-compatible metadata and raw Codex patch fallback.
 - omp edit-tool details (`EditToolDetails.perFileResults`) must also be supported.
 - The self-heal path must be a no-op when the host does not provide `pi.appendEntry`, `pi.sendMessage`, or `pi.on("session_compact", ...)`.
-- Do not modify footer UI by replacing it; use the `pi-comment-checker` above-editor widget and `ctx.ui.setStatus` lines.
+- The extension does not render TUI widgets or footer status lines; warnings are surfaced to the LLM via tool result content and `pi.sendMessage` only.
 
 ## Don'ts
 

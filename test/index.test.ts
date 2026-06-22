@@ -6,24 +6,18 @@ import {
 	type ExtensionContextLike,
 } from "../src/index.ts";
 
-function makeContext(): ExtensionContextLike & { widgetCalls: unknown[] } {
-	const widgetCalls: unknown[] = [];
+function makeContext(): ExtensionContextLike {
 	return {
 		cwd: "/workspace",
 		sessionManager: {
 			getSessionId: () => "session-1",
 		},
-		ui: {
-			setWidget: (key, lines, options) => {
-				widgetCalls.push([key, lines, options]);
-			},
-		},
-		widgetCalls,
+		ui: {},
 	};
 }
 
 describe("createCommentCheckerToolResultHandler", () => {
-	it("#given apply_patch metadata warning #when handling tool result #then appends checker warning and keeps widget hidden", async () => {
+	it("#given apply_patch metadata warning #when handling tool result #then appends checker warning", async () => {
 		// given
 		const event: ToolResultLike = {
 			toolName: "apply_patch",
@@ -78,16 +72,9 @@ describe("createCommentCheckerToolResultHandler", () => {
 			{ type: "text", text: "\n\nCOMMENT DETECTED" },
 		]);
 		expect(result?.isError).toBe(true);
-		expect(ctx.widgetCalls).toEqual([
-			[
-				"pi-comment-checker",
-				["⚠ omp-comment-checker", "  1 warning(s) in:", "  • src/example.ts — COMMENT DETECTED"],
-				{ placement: "aboveEditor" },
-			],
-		]);
 	});
 
-	it("#given missing binary #when handling write result #then hides setup guidance without changing tool output", async () => {
+	it("#given missing binary #when handling write result #then leaves tool output unchanged", async () => {
 		// given
 		const handler = createCommentCheckerToolResultHandler({
 			run: async () => ({
@@ -113,10 +100,9 @@ describe("createCommentCheckerToolResultHandler", () => {
 
 		// then
 		expect(result).toBeUndefined();
-		expect(ctx.widgetCalls).toEqual([["pi-comment-checker", undefined, { placement: "aboveEditor" }]]);
 	});
 
-	it("#given write warning #when handling tool result #then appends checker warning and keeps widget hidden", async () => {
+	it("#given write warning #when handling tool result #then appends checker warning", async () => {
 		// given
 		const event: ToolResultLike = {
 			toolName: "write",
@@ -139,13 +125,7 @@ describe("createCommentCheckerToolResultHandler", () => {
 
 		// when
 		const result = await handler(event, ctx);
-		expect(ctx.widgetCalls).toEqual([
-			[
-				"pi-comment-checker",
-				["⚠ omp-comment-checker", "  1 warning(s) in:", "  • src/example.ts — COMMENT DETECTED"],
-				{ placement: "aboveEditor" },
-			],
-		]);
+
 		// then
 		expect(result?.content).toEqual([
 			{ type: "text", text: "wrote src/example.ts" },
@@ -153,7 +133,7 @@ describe("createCommentCheckerToolResultHandler", () => {
 		]);
 	});
 
-	it("#given write clean #when handling tool result #then leaves tool output unchanged and keeps TUI hidden", async () => {
+	it("#given write clean #when handling tool result #then leaves tool output unchanged", async () => {
 		// given
 		const event: ToolResultLike = {
 			toolName: "write",
@@ -179,10 +159,9 @@ describe("createCommentCheckerToolResultHandler", () => {
 
 		// then
 		expect(result).toBeUndefined();
-		expect(ctx.widgetCalls).toEqual([["pi-comment-checker", undefined, { placement: "aboveEditor" }]]);
 	});
 
-	it("#given edit warning #when handling tool result #then appends checker warning and keeps widget hidden", async () => {
+	it("#given edit warning #when handling tool result #then appends checker warning", async () => {
 		// given
 		const event: ToolResultLike = {
 			toolName: "edit",
@@ -212,16 +191,9 @@ describe("createCommentCheckerToolResultHandler", () => {
 			{ type: "text", text: "edited src/example.ts" },
 			{ type: "text", text: "\n\nCOMMENT DETECTED" },
 		]);
-		expect(ctx.widgetCalls).toEqual([
-			[
-				"pi-comment-checker",
-				["⚠ omp-comment-checker", "  1 warning(s) in:", "  • src/example.ts — COMMENT DETECTED"],
-				{ placement: "aboveEditor" },
-			],
-		]);
 	});
 
-	it("#given checker error #when handling tool result #then leaves tool output unchanged and keeps TUI hidden", async () => {
+	it("#given checker error #when handling tool result #then leaves tool output unchanged", async () => {
 		// given
 		const event: ToolResultLike = {
 			toolName: "write",
@@ -245,7 +217,6 @@ describe("createCommentCheckerToolResultHandler", () => {
 
 		// then
 		expect(result).toBeUndefined();
-		expect(ctx.widgetCalls).toEqual([["pi-comment-checker", undefined, { placement: "aboveEditor" }]]);
 	});
 });
 
@@ -301,13 +272,6 @@ describe("createCommentCheckerToolCallHandler", () => {
 		expect(onWarnings).toEqual([
 			{ filePath: "src/example.ts", message: "COMMENT DETECTED", sourceToolName: "write" },
 		]);
-		expect(ctx.widgetCalls).toEqual([
-			[
-				"pi-comment-checker",
-				["⚠ omp-comment-checker", "  1 warning(s) in:", "  • src/example.ts — COMMENT DETECTED"],
-				{ placement: "aboveEditor" },
-			],
-		]);
 	});
 
 	it("#given an edit with bad comments #when handling tool_call #then blocks with the checker message as reason", async () => {
@@ -337,7 +301,7 @@ describe("createCommentCheckerToolCallHandler", () => {
 		expect(result).toEqual({ block: true, reason: "AI comment detected" });
 	});
 
-	it("#given a clean write #when handling tool_call #then passes through and hides the widget", async () => {
+	it("#given a clean write #when handling tool_call #then passes through", async () => {
 		// given
 		const event: ToolCallLike = {
 			toolName: "write",
@@ -361,7 +325,6 @@ describe("createCommentCheckerToolCallHandler", () => {
 
 		// then
 		expect(result).toBeUndefined();
-		expect(ctx.widgetCalls).toEqual([["pi-comment-checker", undefined, { placement: "aboveEditor" }]]);
 	});
 
 	it("#given skipCommentCheck #when handling tool_call #then passes through without invoking the checker", async () => {
@@ -414,7 +377,7 @@ describe("createCommentCheckerToolCallHandler", () => {
 		expect(invocations).toBe(0);
 	});
 
-	it("#given a missing binary #when handling tool_call #then passes through and surfaces the missing widget", async () => {
+	it("#given a missing binary #when handling tool_call #then passes through", async () => {
 		// given
 		const event: ToolCallLike = {
 			toolName: "write",
@@ -430,6 +393,5 @@ describe("createCommentCheckerToolCallHandler", () => {
 
 		// then
 		expect(result).toBeUndefined();
-		expect(ctx.widgetCalls).toEqual([["pi-comment-checker", undefined, { placement: "aboveEditor" }]]);
 	});
 });

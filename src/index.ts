@@ -10,7 +10,6 @@ import {
 } from "./core.js";
 import { createOmpBackend, OMP_WARNING_ENTRY_TYPE } from "./omp.js";
 import { SelfHealStore } from "./self-heal.js";
-import { type CommentCheckerUiState, formatFooterStatus, syncCommentCheckerWidget, type WidgetSetter } from "./ui.js";
 
 type ExtensionApiLike = {
 	on: <E extends string>(
@@ -30,8 +29,6 @@ export type ExtensionContextLike = {
 		getHeader?: () => { id?: string } | null;
 	};
 	ui: {
-		setWidget: WidgetSetter;
-		setStatus?: (key: string, text: string | undefined) => void;
 		notify?: (message: string, level?: "info" | "warning" | "error") => void;
 	};
 };
@@ -50,13 +47,6 @@ export default function ompCommentCheckerExtension(pi: unknown): void {
 	const api = pi as ExtensionApiLike;
 	const backend = createOmpBackend(pi);
 	const store = new SelfHealStore();
-	let state: CommentCheckerUiState = { status: "idle", checkedFiles: [], warnings: [] };
-
-	const setState = (ctx: ExtensionContextLike, nextState: CommentCheckerUiState): void => {
-		state = nextState;
-		syncCommentCheckerWidget(ctx.ui.setWidget, state);
-		backend.setStatus(ctx, formatFooterStatus(state));
-	};
 
 	const runChecker = (input: CommentCheckerHookInput) => runCommentChecker(input);
 	const onWarning = (warning: { filePath: string; message: string; sourceToolName: string }): void => {
@@ -70,13 +60,8 @@ export default function ompCommentCheckerExtension(pi: unknown): void {
 		});
 	};
 
-	api.on("session_start", async (_event: unknown, ctx: ExtensionContextLike) => {
+	api.on("session_start", async () => {
 		store.clear();
-		if (!resolveCommentCheckerBinary()) {
-			setState(ctx, { status: "missing", checkedFiles: [], warnings: [] });
-			return;
-		}
-		setState(ctx, { status: "idle", checkedFiles: [], warnings: [] });
 	});
 
 	api.on(
@@ -110,7 +95,6 @@ export default function ompCommentCheckerExtension(pi: unknown): void {
 		description: "Show omp-comment-checker status and pending warnings.",
 		handler: async (_args: string[], ctx: ExtensionContextLike) => {
 			if (!resolveCommentCheckerBinary()) {
-				setState(ctx, { status: "missing", checkedFiles: [], warnings: [] });
 				ctx.ui.notify?.("omp-comment-checker binary missing; reinstall @code-yeongyu/comment-checker.", "warning");
 				return;
 			}
@@ -193,40 +177,13 @@ export function createCommentCheckerToolCallHandler(deps: CommentCheckerHandlerD
 		const runner = deps.run ?? ((input: CommentCheckerHookInput) => runCommentChecker(input));
 		const outcome = await runChecks(requests, runner, ctx);
 
-		if (outcome.missing) {
-			syncCommentCheckerWidget(ctx.ui.setWidget, {
-				status: "missing",
-				checkedFiles: outcome.checkedFiles,
-				warnings: outcome.warnings,
-			});
-			return undefined;
-		}
-		if (outcome.errorMessage !== null) {
-			syncCommentCheckerWidget(ctx.ui.setWidget, {
-				status: "error",
-				checkedFiles: outcome.checkedFiles,
-				warnings: outcome.warnings,
-				errorMessage: outcome.errorMessage,
-			});
-			return undefined;
-		}
-		if (outcome.warnings.length === 0) {
-			syncCommentCheckerWidget(ctx.ui.setWidget, {
-				status: "clean",
-				checkedFiles: outcome.checkedFiles,
-				warnings: outcome.warnings,
-			});
+		if (outcome.missing || outcome.errorMessage !== null || outcome.warnings.length === 0) {
 			return undefined;
 		}
 
 		for (const warning of outcome.warnings) {
 			deps.onWarning?.(warning);
 		}
-		syncCommentCheckerWidget(ctx.ui.setWidget, {
-			status: "warning",
-			checkedFiles: outcome.checkedFiles,
-			warnings: outcome.warnings,
-		});
 		return {
 			block: true,
 			reason: formatBlockReason(outcome.warnings),
@@ -242,41 +199,13 @@ export function createCommentCheckerToolResultHandler(deps: CommentCheckerHandle
 		const runner = deps.run ?? ((input: CommentCheckerHookInput) => runCommentChecker(input));
 		const outcome = await runChecks(requests, runner, ctx);
 
-		if (outcome.missing) {
-			syncCommentCheckerWidget(ctx.ui.setWidget, {
-				status: "missing",
-				checkedFiles: outcome.checkedFiles,
-				warnings: outcome.warnings,
-			});
-			return undefined;
-		}
-		if (outcome.errorMessage !== null) {
-			syncCommentCheckerWidget(ctx.ui.setWidget, {
-				status: "error",
-				checkedFiles: outcome.checkedFiles,
-				warnings: outcome.warnings,
-				errorMessage: outcome.errorMessage,
-			});
-			return undefined;
-		}
-
-		if (outcome.warnings.length === 0) {
-			syncCommentCheckerWidget(ctx.ui.setWidget, {
-				status: "clean",
-				checkedFiles: outcome.checkedFiles,
-				warnings: outcome.warnings,
-			});
+		if (outcome.missing || outcome.errorMessage !== null || outcome.warnings.length === 0) {
 			return undefined;
 		}
 
 		for (const warning of outcome.warnings) {
 			deps.onWarning?.(warning);
 		}
-		syncCommentCheckerWidget(ctx.ui.setWidget, {
-			status: "warning",
-			checkedFiles: outcome.checkedFiles,
-			warnings: outcome.warnings,
-		});
 		return {
 			content: [
 				...(event.content ?? []),

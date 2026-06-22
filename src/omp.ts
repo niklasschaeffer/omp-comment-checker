@@ -1,6 +1,3 @@
-import type { ExtensionContextLike } from "./index.js";
-import { COMMENT_CHECKER_WIDGET_KEY } from "./ui.js";
-
 export const OMP_WARNING_ENTRY_TYPE = "omp-comment-checker:warning";
 
 export type WarningRecord = {
@@ -21,8 +18,6 @@ type PiHost = {
 export type OmpBackend = {
 	/** True if the host supports omp-only UI affordances. */
 	readonly available: boolean;
-	/** If available, write a sticky footer status line. No-op otherwise. */
-	setStatus(ctx: ExtensionContextLike, text: string | undefined): void;
 	/** If available, append a non-LLM-visible entry to the session. */
 	appendEntry(customType: string, data: unknown): void;
 	/** If available, send an LLM-visible custom message. */
@@ -49,17 +44,6 @@ export function createOmpBackend(pi: unknown): OmpBackend {
 
 	return {
 		available,
-
-		setStatus(ctx, text) {
-			if (!available) {
-				return;
-			}
-
-			const setStatus = ctx.ui.setStatus;
-			if (typeof setStatus === "function") {
-				setStatus(COMMENT_CHECKER_WIDGET_KEY, text);
-			}
-		},
 
 		appendEntry(customType, data) {
 			api?.appendEntry?.(customType, data);

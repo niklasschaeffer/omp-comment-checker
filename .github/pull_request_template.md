@@ -16,5 +16,4 @@
 
 - [ ] `write`, `edit`, `multiedit`, and `apply_patch` paths remain covered by tests
 - [ ] OMO-compatible `apply_patch` metadata support remains covered by tests
-- [ ] TUI widget changes do not touch footer behavior
 - [ ] CHANGELOG entry added for user-facing changes

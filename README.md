@@ -16,15 +16,13 @@ the next session compaction so the LLM sees it again on the next turn.
 
 ## Why this fork
 
-Pi and omp share the same extension shape, but omp ships three extra
+Pi and omp share the same extension shape, but omp ships two extra
 capabilities this checker uses to recover from comment-detected output:
 
 | Capability | What the checker does with it |
 | --- | --- |
 | `pi.appendEntry(customType, data)` | Persists each unfired warning to the session file. |
 | `pi.sendMessage(content, options)` | Re-injects unresolved warnings as a custom message on `session_compact`. |
-| `ctx.ui.setStatus(key, text)` | Shows a sticky footer line: `⚠ comment-checker: N warning(s) in …`. |
-| `ctx.ui.notify(message, level)` | Flashes a per-warning notification. |
 
 The fork detects the host at load time. If `appendEntry` / `sendMessage`
 are absent (plain pi), the self-heal loop is a no-op and behavior matches
@@ -42,8 +40,8 @@ upstream 0.1.0 exactly.
 | `apply_patch` succeeds without metadata | falls back to raw Codex patch parsing |
 | omp `edit` tool (any mode: `hashline` / `patch` / `replace` / `apply_patch`) | reads `details.perFileResults` for `oldText` / `newText` per affected file |
 | checker exits `2` (post-exec) | appends the warning message to the tool result, marks the result `isError: true`, and fires the self-heal path |
-| checker binary missing | leaves the TUI hidden, leaves tool output unchanged, no self-heal, pre-exec passes through |
-| checker exits unexpectedly | leaves the TUI hidden, leaves tool output unchanged, no self-heal |
+| checker binary missing | leaves tool output unchanged, no self-heal, pre-exec passes through |
+| checker exits unexpectedly | leaves tool output unchanged, no self-heal |
 
 ## Self-heal flow
 
@@ -64,7 +62,6 @@ upstream 0.1.0 exactly.
 6. On the next session_compact event, re-inject any unfired warnings
    via pi.sendMessage(...) so the LLM sees them again as fresh
    context. The store is cleared on session_start.
-7. Update the omp footer status line via ctx.ui.setStatus.
 ```
 
 The `session_compact` listener only fires under omp. Under plain pi, the
@@ -107,7 +104,7 @@ interactive session.
 
 Shows binary availability, the current warning count, and the list of
 unfired warnings. If the binary is missing, the command prints setup
-guidance and pings the footer status line.
+guidance.
 
 ## Development
 
