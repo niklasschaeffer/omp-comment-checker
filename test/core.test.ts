@@ -306,6 +306,50 @@ describe("extractCommentCheckRequests", () => {
 		// then
 		expect(requests).toEqual([]);
 	});
+
+	it("#given a content field that is not an array #when extracting requests #then treats it as empty content", () => {
+		// given
+		const event = {
+			toolName: "write",
+			input: { filePath: "src/example.ts", content: "const value = 1;\n" },
+			content: "not an array" as unknown as ToolResultLike["content"],
+			isError: false,
+		} as unknown as Parameters<typeof extractCommentCheckRequests>[0];
+
+		// when / then
+		expect(() => extractCommentCheckRequests(event)).not.toThrow();
+		expect(extractCommentCheckRequests(event).length).toBe(1);
+	});
+
+	it("#given a content field that is an object #when extracting requests #then treats it as empty content", () => {
+		// given
+		const event = {
+			toolName: "write",
+			input: { filePath: "src/example.ts", content: "const value = 1;\n" },
+			content: { not: "an array" } as unknown as ToolResultLike["content"],
+			isError: false,
+		} as unknown as Parameters<typeof extractCommentCheckRequests>[0];
+
+		// when / then
+		expect(() => extractCommentCheckRequests(event)).not.toThrow();
+	});
+
+	it("#given a non-object event #when extracting requests #then returns no work instead of throwing", () => {
+		// when / then
+		expect(() => extractCommentCheckRequests(null as never)).not.toThrow();
+		expect(() => extractCommentCheckRequests(undefined as never)).not.toThrow();
+		expect(() => extractCommentCheckRequests("string" as never)).not.toThrow();
+		expect(() => extractCommentCheckRequests(42 as never)).not.toThrow();
+		expect(extractCommentCheckRequests(null as never)).toEqual([]);
+		expect(extractCommentCheckRequests(undefined as never)).toEqual([]);
+	});
+
+	it("#given an event missing toolName or input #when extracting requests #then returns no work instead of throwing", () => {
+		// when / then
+		expect(extractCommentCheckRequests({} as never)).toEqual([]);
+		expect(extractCommentCheckRequests({ toolName: "write" } as never)).toEqual([]);
+		expect(extractCommentCheckRequests({ toolName: "write", input: null } as never)).toEqual([]);
+	});
 });
 
 describe("toHookInput", () => {

@@ -139,6 +139,10 @@ function ompEditResultsToCommentCheckRequests(
 	return requests;
 }
 export function extractCommentCheckRequests(event: ToolCallOrResultLike): CommentCheckRequest[] {
+	if (event === null || typeof event !== "object") return [];
+	if (typeof event.toolName !== "string") return [];
+	if (event.input === null || typeof event.input !== "object") return [];
+
 	if (hasResultFields(event) && event.isError) return [];
 	if (hasResultFields(event) && isToolFailureOutput(getContentText(event.content))) return [];
 
@@ -397,7 +401,7 @@ function makeAccumulator(operation: ApplyPatchAccumulator["operation"], filePath
 }
 
 function getContentText(content: ToolResultContent[] | undefined): string {
-	if (!content) return "";
+	if (!Array.isArray(content)) return "";
 	return content
 		.filter((block): block is TextContent => block.type === "text")
 		.map((block) => block.text)
