@@ -375,4 +375,54 @@ describe("ompCommentCheckerExtension end-to-end", () => {
 		expect(sentMessage).toContain("omp-comment-checker self-heal: 1 warning(s) still need addressing:");
 		expect(sentMessage).toContain("• src/example.ts:");
 	});
+
+	it("#given a non-write/edit tool_call #when the LLM invokes it #then the comment-checker does not interfere", async () => {
+		// given
+		const eventHandlers: Record<string, Array<(event: unknown, ctx: ExtensionContextLike) => unknown>> = {};
+		const pi = {
+			appendEntry: () => {
+				/* no-op */
+			},
+			sendMessage: () => {
+				/* no-op */
+			},
+			on: (event: string, handler: (event: unknown, ctx: ExtensionContextLike) => unknown) => {
+				const handlers = eventHandlers[event] ?? [];
+				eventHandlers[event] = handlers;
+				handlers.push(handler);
+				return () => {
+					eventHandlers[event] = eventHandlers[event]?.filter((h) => h !== handler) ?? [];
+				};
+			},
+			registerCommand: () => {
+				/* no-op */
+			},
+		};
+
+		// when
+		ompCommentCheckerExtension(pi);
+		const toolCallHandlers = eventHandlers["tool_call"];
+		expect(toolCallHandlers).toBeDefined();
+		const callHandler = toolCallHandlers?.[0];
+		expect(typeof callHandler).toBe("function");
+
+		// then: tools the checker doesn't cover (bash, read, etc.) pass through.
+		const ctx: ExtensionContextLike = {
+			cwd: "/workspace",
+			sessionManager: { getSessionId: () => "session-1" },
+			ui: {
+				setWidget: () => {
+					/* no-op */
+				},
+				setStatus: () => {
+					/* no-op */
+				},
+				notify: () => {
+					/* no-op */
+				},
+			},
+		};
+		const result = await callHandler?.({ toolName: "bash", input: { command: "ls" } }, ctx);
+		expect(result).toBeUndefined();
+	});
 });

@@ -41,6 +41,16 @@ export type CommentCheckerHookInput = {
 
 export type ToolResultContent = TextContent | ImageContent;
 
+export type ToolCallLike = {
+	toolName: string;
+	input: Record<string, unknown>;
+};
+
+export type ToolCallHandlerResult = {
+	block?: boolean;
+	reason?: string;
+};
+
 export type ToolResultLike = {
 	toolName: string;
 	input: Record<string, unknown>;
@@ -48,6 +58,12 @@ export type ToolResultLike = {
 	isError?: boolean;
 	details?: unknown;
 };
+
+export type ToolCallOrResultLike = ToolCallLike | ToolResultLike;
+
+function hasResultFields(event: ToolCallOrResultLike): event is ToolResultLike {
+	return "content" in event || "isError" in event || "details" in event;
+}
 
 type ApplyPatchAccumulator = {
 	operation: "add" | "delete" | "update";
@@ -122,15 +138,14 @@ function ompEditResultsToCommentCheckRequests(
 	}
 	return requests;
 }
-
-export function extractCommentCheckRequests(event: ToolResultLike): CommentCheckRequest[] {
-	if (event.isError) return [];
-	if (isToolFailureOutput(getContentText(event.content))) return [];
+export function extractCommentCheckRequests(event: ToolCallOrResultLike): CommentCheckRequest[] {
+	if (hasResultFields(event) && event.isError) return [];
+	if (hasResultFields(event) && isToolFailureOutput(getContentText(event.content))) return [];
 
 	const toolName = event.toolName.toLowerCase();
 	if (toolName === "write") return extractWriteRequest(event);
 	if (toolName === "edit") {
-		const ompResults = extractFromOmpEditDetails(event.details);
+		const ompResults = hasResultFields(event) ? extractFromOmpEditDetails(event.details) : [];
 		const ompRequests = ompEditResultsToCommentCheckRequests(event.toolName, ompResults);
 		if (ompRequests.length > 0) return ompRequests;
 		return extractEditRequest(event);
@@ -167,7 +182,7 @@ export function isToolFailureOutput(text: string): boolean {
 	);
 }
 
-function extractWriteRequest(event: ToolResultLike): CommentCheckRequest[] {
+function extractWriteRequest(event: ToolCallOrResultLike): CommentCheckRequest[] {
 	const filePath = getString(event.input, ["filePath", "file_path", "path"]);
 	const content = getString(event.input, ["content"]);
 	if (!filePath || content === undefined) return [];
@@ -184,7 +199,7 @@ function extractWriteRequest(event: ToolResultLike): CommentCheckRequest[] {
 	];
 }
 
-function extractEditRequest(event: ToolResultLike): CommentCheckRequest[] {
+function extractEditRequest(event: ToolCallOrResultLike): CommentCheckRequest[] {
 	const filePath = getString(event.input, ["filePath", "file_path", "path"]);
 	const oldString = getString(event.input, ["oldString", "old_string"]);
 	const newString = getString(event.input, ["newString", "new_string"]);
@@ -202,7 +217,7 @@ function extractEditRequest(event: ToolResultLike): CommentCheckRequest[] {
 	];
 }
 
-function extractMultiEditRequest(event: ToolResultLike): CommentCheckRequest[] {
+function extractMultiEditRequest(event: ToolCallOrResultLike): CommentCheckRequest[] {
 	const filePath = getString(event.input, ["filePath", "file_path", "path"]);
 	const edits = getEdits(event.input["edits"]);
 	if (!filePath || edits.length === 0) return [];
@@ -219,8 +234,11 @@ function extractMultiEditRequest(event: ToolResultLike): CommentCheckRequest[] {
 	];
 }
 
-function extractApplyPatchRequests(event: ToolResultLike): CommentCheckRequest[] {
-	const metadataRequests = extractApplyPatchMetadataRequests(event.details, event.toolName);
+function extractApplyPatchRequests(event: ToolCallOrResultLike): CommentCheckRequest[] {
+	const metadataRequests = extractApplyPatchMetadataRequests(
+		hasResultFields(event) ? event.details : undefined,
+		event.toolName,
+	);
 	if (metadataRequests.length > 0) return metadataRequests;
 
 	const patch = getString(event.input, ["input", "patch"]);

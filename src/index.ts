@@ -2,6 +2,8 @@ import { type CommentCheckerRunResult, resolveCommentCheckerBinary, runCommentCh
 import {
 	type CommentCheckerHookInput,
 	extractCommentCheckRequests,
+	type ToolCallHandlerResult,
+	type ToolCallLike,
 	type ToolResultContent,
 	type ToolResultLike,
 	toHookInput,
@@ -36,6 +38,7 @@ export type ExtensionContextLike = {
 
 export type ToolResultHandlerResult = {
 	content?: ToolResultContent[];
+	isError?: boolean;
 };
 
 export type CommentCheckerHandlerDeps = {
@@ -55,6 +58,18 @@ export default function ompCommentCheckerExtension(pi: unknown): void {
 		backend.setStatus(ctx, formatFooterStatus(state));
 	};
 
+	const runChecker = (input: CommentCheckerHookInput) => runCommentChecker(input);
+	const onWarning = (warning: { filePath: string; message: string; sourceToolName: string }): void => {
+		const record = store.record(warning);
+		backend.appendEntry(OMP_WARNING_ENTRY_TYPE, {
+			filePath: record.filePath,
+			message: record.message,
+			sourceToolName: record.sourceToolName,
+			ts: record.ts,
+			id: record.id,
+		});
+	};
+
 	api.on("session_start", async (_event: unknown, ctx: ExtensionContextLike) => {
 		store.clear();
 		if (!resolveCommentCheckerBinary()) {
@@ -65,19 +80,18 @@ export default function ompCommentCheckerExtension(pi: unknown): void {
 	});
 
 	api.on(
+		"tool_call",
+		createCommentCheckerToolCallHandler({
+			run: runChecker,
+			onWarning,
+		}) as (event: unknown, ctx: ExtensionContextLike) => Promise<unknown>,
+	);
+
+	api.on(
 		"tool_result",
 		createCommentCheckerToolResultHandler({
-			run: (input) => runCommentChecker(input),
-			onWarning: (warning) => {
-				const record = store.record(warning);
-				backend.appendEntry(OMP_WARNING_ENTRY_TYPE, {
-					filePath: record.filePath,
-					message: record.message,
-					sourceToolName: record.sourceToolName,
-					ts: record.ts,
-					id: record.id,
-				});
-			},
+			run: runChecker,
+			onWarning,
 		}) as (event: unknown, ctx: ExtensionContextLike) => Promise<ToolResultHandlerResult | undefined>,
 	);
 
@@ -111,63 +125,167 @@ export default function ompCommentCheckerExtension(pi: unknown): void {
 	});
 }
 
+type Warning = { filePath: string; message: string; sourceToolName: string };
+
+type CheckerRunOutcome = {
+	checkedFiles: string[];
+	warnings: Warning[];
+	missing: boolean;
+	errorMessage: string | null;
+};
+
+async function runChecks(
+	requests: ReturnType<typeof extractCommentCheckRequests>,
+	runner: (input: CommentCheckerHookInput) => Promise<CommentCheckerRunResult>,
+	ctx: ExtensionContextLike,
+): Promise<CheckerRunOutcome> {
+	const checkedFiles: string[] = [];
+	const warnings: Warning[] = [];
+	let missing = false;
+	let errorMessage: string | null = null;
+
+	for (const request of requests) {
+		const input = toHookInput(request, { sessionId: getSessionId(ctx), cwd: ctx.cwd });
+		const result = await runner(input);
+		if (result.status === "missing") {
+			missing = true;
+			break;
+		}
+		if (result.status === "error") {
+			errorMessage = result.message;
+			break;
+		}
+		checkedFiles.push(request.filePath);
+		if (result.status === "warning" && result.message.trim().length > 0) {
+			warnings.push({
+				filePath: request.filePath,
+				message: result.message.trim(),
+				sourceToolName: request.sourceToolName,
+			});
+		}
+	}
+
+	return { checkedFiles, warnings, missing, errorMessage };
+}
+
+function formatBlockReason(warnings: Warning[]): string {
+	const first = warnings[0];
+	if (warnings.length === 1 && first !== undefined) return first.message;
+	return [
+		`omp-comment-checker blocked ${warnings.length} file(s):`,
+		...warnings.map((w) => `• ${w.filePath}: ${w.message}`),
+	].join("\n");
+}
+
+export function createCommentCheckerToolCallHandler(deps: CommentCheckerHandlerDeps) {
+	return async (event: ToolCallLike, ctx: ExtensionContextLike): Promise<ToolCallHandlerResult | undefined> => {
+		const toolName = event.toolName.toLowerCase();
+		if (toolName !== "write" && toolName !== "edit") return undefined;
+
+		if (!resolveCommentCheckerBinary()) return undefined;
+
+		const skipFlag = (event.input as Record<string, unknown>)["skipCommentCheck"];
+		if (skipFlag === true) return undefined;
+
+		const requests = extractCommentCheckRequests(event);
+		if (requests.length === 0) return undefined;
+
+		const runner = deps.run ?? ((input: CommentCheckerHookInput) => runCommentChecker(input));
+		const outcome = await runChecks(requests, runner, ctx);
+
+		if (outcome.missing) {
+			syncCommentCheckerWidget(ctx.ui.setWidget, {
+				status: "missing",
+				checkedFiles: outcome.checkedFiles,
+				warnings: outcome.warnings,
+			});
+			return undefined;
+		}
+		if (outcome.errorMessage !== null) {
+			syncCommentCheckerWidget(ctx.ui.setWidget, {
+				status: "error",
+				checkedFiles: outcome.checkedFiles,
+				warnings: outcome.warnings,
+				errorMessage: outcome.errorMessage,
+			});
+			return undefined;
+		}
+		if (outcome.warnings.length === 0) {
+			syncCommentCheckerWidget(ctx.ui.setWidget, {
+				status: "clean",
+				checkedFiles: outcome.checkedFiles,
+				warnings: outcome.warnings,
+			});
+			return undefined;
+		}
+
+		for (const warning of outcome.warnings) {
+			deps.onWarning?.(warning);
+		}
+		syncCommentCheckerWidget(ctx.ui.setWidget, {
+			status: "warning",
+			checkedFiles: outcome.checkedFiles,
+			warnings: outcome.warnings,
+		});
+		return {
+			block: true,
+			reason: formatBlockReason(outcome.warnings),
+		};
+	};
+}
+
 export function createCommentCheckerToolResultHandler(deps: CommentCheckerHandlerDeps) {
 	return async (event: ToolResultLike, ctx: ExtensionContextLike): Promise<ToolResultHandlerResult | undefined> => {
 		const requests = extractCommentCheckRequests(event);
 		if (requests.length === 0) return undefined;
 
-		const checkedFiles: string[] = [];
-		const warnings: Array<{ filePath: string; message: string; sourceToolName: string }> = [];
 		const runner = deps.run ?? ((input: CommentCheckerHookInput) => runCommentChecker(input));
+		const outcome = await runChecks(requests, runner, ctx);
 
-		for (const request of requests) {
-			const input = toHookInput(request, { sessionId: getSessionId(ctx), cwd: ctx.cwd });
-			const result = await runner(input);
-			if (result.status === "missing") {
-				syncCommentCheckerWidget(ctx.ui.setWidget, {
-					status: "missing",
-					checkedFiles,
-					warnings,
-				});
-				return undefined;
-			}
-			if (result.status === "error") {
-				syncCommentCheckerWidget(ctx.ui.setWidget, {
-					status: "error",
-					checkedFiles,
-					warnings,
-					errorMessage: result.message,
-				});
-				return undefined;
-			}
-			checkedFiles.push(request.filePath);
-			if (result.status === "warning" && result.message.trim().length > 0) {
-				warnings.push({
-					filePath: request.filePath,
-					message: result.message.trim(),
-					sourceToolName: request.sourceToolName,
-				});
-			}
+		if (outcome.missing) {
+			syncCommentCheckerWidget(ctx.ui.setWidget, {
+				status: "missing",
+				checkedFiles: outcome.checkedFiles,
+				warnings: outcome.warnings,
+			});
+			return undefined;
 		}
-
-		for (const warning of warnings) {
-			deps.onWarning?.(warning);
-		}
-
-		if (warnings.length === 0) {
-			syncCommentCheckerWidget(ctx.ui.setWidget, { status: "clean", checkedFiles, warnings });
+		if (outcome.errorMessage !== null) {
+			syncCommentCheckerWidget(ctx.ui.setWidget, {
+				status: "error",
+				checkedFiles: outcome.checkedFiles,
+				warnings: outcome.warnings,
+				errorMessage: outcome.errorMessage,
+			});
 			return undefined;
 		}
 
-		syncCommentCheckerWidget(ctx.ui.setWidget, { status: "warning", checkedFiles, warnings });
+		if (outcome.warnings.length === 0) {
+			syncCommentCheckerWidget(ctx.ui.setWidget, {
+				status: "clean",
+				checkedFiles: outcome.checkedFiles,
+				warnings: outcome.warnings,
+			});
+			return undefined;
+		}
+
+		for (const warning of outcome.warnings) {
+			deps.onWarning?.(warning);
+		}
+		syncCommentCheckerWidget(ctx.ui.setWidget, {
+			status: "warning",
+			checkedFiles: outcome.checkedFiles,
+			warnings: outcome.warnings,
+		});
 		return {
 			content: [
 				...(event.content ?? []),
-				...warnings.map((warning) => ({
+				...outcome.warnings.map((warning) => ({
 					type: "text" as const,
 					text: `\n\n${warning.message}`,
 				})),
 			],
+			isError: true,
 		};
 	};
 }

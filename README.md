@@ -10,9 +10,9 @@ Forked from
 v0.1.0 and retargeted at the omp extension API.
 
 Runs [`@code-yeongyu/comment-checker`](https://github.com/code-yeongyu/go-claude-code-comment-checker)
-after every mutation tool, surfaces the warning back into the tool result
-so the agent must react, and **self-heals** the warning across the next
-session compaction so the LLM sees it again on the next turn.
+before and after every mutation tool, surfaces the warning back into the
+tool result so the agent must react, and **self-heals** the warning across
+the next session compaction so the LLM sees it again on the next turn.
 
 ## Why this fork
 
@@ -34,33 +34,43 @@ upstream 0.1.0 exactly.
 
 | Case | Result |
 |------|--------|
+| `write` / `edit` called (pre-exec) | blocks the call when the checker flags the proposed content; the LLM sees the rejection reason and self-corrects on the next turn |
 | `write` succeeds | checks the written `content` |
 | `edit` succeeds | checks `oldString` / `newString` |
 | `multiedit` succeeds | checks the complete `edits` payload |
 | `apply_patch` succeeds with OMO metadata | checks each metadata file using `before` / `after`, skips deletes |
 | `apply_patch` succeeds without metadata | falls back to raw Codex patch parsing |
 | omp `edit` tool (any mode: `hashline` / `patch` / `replace` / `apply_patch`) | reads `details.perFileResults` for `oldText` / `newText` per affected file |
-| checker exits `2` | appends the warning message to the tool result AND fires the self-heal path |
-| checker binary missing | leaves the TUI hidden, leaves tool output unchanged, no self-heal |
+| checker exits `2` (post-exec) | appends the warning message to the tool result, marks the result `isError: true`, and fires the self-heal path |
+| checker binary missing | leaves the TUI hidden, leaves tool output unchanged, no self-heal, pre-exec passes through |
 | checker exits unexpectedly | leaves the TUI hidden, leaves tool output unchanged, no self-heal |
 
 ## Self-heal flow
 
 ```
-1. Mutation tool (write / edit / multiedit / apply_patch) finishes.
-2. omp-comment-checker reads the result, extracts the file payload,
-   runs the @code-yeongyu/comment-checker binary, exit code 2.
-3. Append the warning to the existing tool result content so the
-   current LLM turn sees it.
-4. Persist the warning via pi.appendEntry("omp-comment-checker:warning", …).
-5. On the next session_compact event, re-inject any unfired warnings
+1. Mutation tool (write / edit / multiedit / apply_patch) is about to run.
+2. omp-comment-checker inspects the proposed content, runs the
+   @code-yeongyu/comment-checker binary, exit code 2.
+3. If the binary flags the content, return { block: true, reason } so
+   the host aborts the tool call before the file is written. The
+   rejection reason is fed back to the LLM so it can self-correct on
+   the next turn.
+4. If the binary passes, let the tool run. On the matching tool_result,
+   re-run the checker against the post-mutation content for modes we
+   could not pre-check (apply_patch, hashline). Append the warning to
+   the existing tool result content AND mark isError:true so the LLM
+   treats the result as a failed tool call.
+5. Persist each warning via pi.appendEntry("omp-comment-checker:warning", …).
+6. On the next session_compact event, re-inject any unfired warnings
    via pi.sendMessage(...) so the LLM sees them again as fresh
    context. The store is cleared on session_start.
-6. Update the omp footer status line via ctx.ui.setStatus.
+7. Update the omp footer status line via ctx.ui.setStatus.
 ```
 
 The `session_compact` listener only fires under omp. Under plain pi, the
 listener registration is skipped and the store is local-only.
+Per-call overrides: pass `skipCommentCheck: true` in the tool input to
+opt out of the pre-exec check for that call.
 
 ## Installation
 
