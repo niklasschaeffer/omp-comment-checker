@@ -9,45 +9,43 @@ permissions:
   contents: read
 
 jobs:
+  # Run tests first to ensure quality before release
   test:
     name: Test
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24"
+          node-version: "25"
           cache: "npm"
 
       - name: Install dependencies
         run: npm ci
 
       - name: Run TypeScript type check
-        run: npm run typecheck
+        run: npm run type-check
 
-      - name: Run lint
+      - name: Run ESLint
         run: npm run lint
 
-      - name: Run tests
-        run: npm test
-
+  # Run semantic-release if tests pass
   release:
     name: Release
     needs: test
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
       contents: write
       issues: write
       pull-requests: write
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -62,7 +60,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24"
+          node-version: "25"
           cache: "npm"
 
       - name: Install dependencies
